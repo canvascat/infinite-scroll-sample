@@ -1,17 +1,8 @@
 <template>
-  <li
-    class="item"
-    ref="item"
-  >
-    <div
-      class="item__wrapper"
-      :class="{ 'is-fixed': fixedHeight }"
-    >
+  <li class="item" ref="liRef">
+    <div class="item__wrapper" :class="{ 'is-fixed': fixedHeight }" >
       <div class="item__info">
-        <img
-          :src="data.avatar"
-          class="item__avatar"
-        />
+        <img :src="data.avatar" class="item__avatar" />
         <p class="item__name">{{ index }}. {{ data.name }}</p>
         <p class="item__date">{{ data.dob }}</p>
       </div>
@@ -23,25 +14,21 @@
       </template>
       <template v-else>
         <p class="item__paragraph">{{ data.paragraph }}</p>
-        <img
-          :src="defferImgSrc"
-          :style="{ width: data.img.width }"
-          class="item__img"
-        />
-        <img
-          :src="data.img.src"
-          :style="{ width: data.img.width }"
-          class="item__img"
-        />
+        <img loading="lazy" :src="defferImgSrc" class="item__img" />
+        <img loading="lazy" :src="data.img.src" class="item__img" />
       </template>
     </div>
   </li>
 </template>
 
-<script  lang="ts">
+<script lang="ts">
+import { defineComponent, onMounted, onUnmounted, ref } from 'vue'
 import faker from 'faker'
+import { sleep } from 'src/util'
+import type { PropType } from 'vue'
+import type { DataItem } from 'src/types'
 
-export default {
+export default defineComponent({
   name: 'item',
   props: {
     index: {
@@ -49,40 +36,45 @@ export default {
       default: 0,
     },
     data: {
-      type: Object,
-      default: () => ({}),
+      type: Object as PropType<DataItem>,
+      required: true
     },
     fixedHeight: {
       type: Boolean,
       default: true,
     },
   },
-  data() {
-    return {
-      defferImgSrc: '',
-    };
-  },
-  created() {
+
+  setup (props, context) {
+    const defferImgSrc = ref('')
+    const liRef = ref<HTMLLIElement>()
+    const ro = ref<ResizeObserver>()
     // 模拟图片加载时间
-    if (this.data.img.isDeffer) {
-      this.defferImgSrc = this.data.img.src;
+    if (props.data.img.loaded) {
+      defferImgSrc.value = props.data.img.src;
     } else {
-      setTimeout(() => {
-        this.defferImgSrc = this.data.img.src;
-        this.data.img.isDeffer = true;
-      }, faker.random.number({ min: 300, max: 5000 }));
+      sleep(faker.datatype.number({ min: 300, max: 5000 }))
+        .then(() => {
+          defferImgSrc.value = props.data.img.src;
+          props.data.img.loaded = true;
+        })
     }
-  },
-  mounted() {
-    if (this.fixedHeight) return;
-    const ro = new ResizeObserver((entries, observer) => {
-      // 高度发生变化时，将 'size-change' 事件 emit 到父组件
-      this.$emit('size-change', this.index);
-    });
-    ro.observe(this.$refs.item);
-    this.$once('hook:beforeDestroy', ro.disconnect.bind(ro));
-  },
-};
+    onMounted(() => {
+      if (props.fixedHeight) return;
+      ro.value = new ResizeObserver((entries, observer) => {
+        context.emit('size-change', props.index)
+      });
+      ro.value.observe(liRef.value!);
+    })
+    onUnmounted(() => {
+      ro.value?.disconnect.bind(ro.value)
+    })
+    return {
+      defferImgSrc,
+      liRef
+    }
+  }
+});
 </script>
 
 <style scoped lang="scss">
