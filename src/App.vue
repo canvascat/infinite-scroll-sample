@@ -5,16 +5,13 @@
     @scroll="handleScroll"
   >
     <!-- 负责撑开 ul 的高度 -->
-    <li
-      class="height-dynamic__scroll-runway"
-      :style="`transform: translate(0, ${scrollRunwayEnd}px)`"
-    ></li>
+    <li class="height-dynamic__scroll-runway" :style="`transform: translateY(${scrollRunwayEnd}px)`"></li>
     <!-- 下拉占位符 -->
-    <place-holder
+    <placeholder-item
       class="height-dynamic__placeholder"
       v-for="(item, index) in topPlaceholders"
       :key="-index - 1"
-      :style="`transform: translate(0, ${cachedScrollY[firstAttachedItem] - ESTIMATED_HEIGHT * (index + 1)}px)`"
+      :style="`transform: translateY(${cachedScrollY[firstAttachedItem] - ESTIMATED_HEIGHT * (index + 1)}px)`"
     />
     <item
       class="height-dynamic__item"
@@ -24,15 +21,15 @@
       :fixed-height="false"
       :key="item.username + item.phone"
       :index="item.index"
-      :style="`transform: translate(0, ${cachedScrollY[item.index] || item.index * ESTIMATED_HEIGHT}px)`"
+      :style="`transform: translateY(${cachedScrollY[item.index] || item.index * ESTIMATED_HEIGHT}px)`"
       @size-change="calItemScrollY"
     />
     <!-- 上拉占位符 -->
-    <place-holder
+    <placeholder-item
       class="height-dynamic__placeholder"
       v-for="(item, index) in bottomPlaceholders"
       :key="index + 1"
-      :style="`transform: translate(0, ${cachedScrollY[lastAttachedItem - 1] + cachedHeight[lastAttachedItem - 1] + ESTIMATED_HEIGHT * (index + 1)}px)`"
+      :style="`transform: translateY(${cachedScrollY[lastAttachedItem - 1] + cachedHeight[lastAttachedItem - 1] + ESTIMATED_HEIGHT * (index + 1)}px)`"
     />
   </ul>
 </template>
@@ -40,7 +37,7 @@
 <script lang="ts">
 import { computed, defineComponent, nextTick, onBeforeUpdate, onMounted, ref } from 'vue'
 import Item from 'src/components/Item.vue'
-import PlaceHolder from 'src/components/PlaceHolder.vue'
+import PlaceholderItem from 'src/components/PlaceholderItem.vue'
 import { fetchData } from 'src/util'
 import type { DataItem } from 'src/types'
 
@@ -238,7 +235,7 @@ export default defineComponent({
       updateItemRefs
     }
   },
-  components: { Item, PlaceHolder },
+  components: { Item, PlaceholderItem },
 });
 </script>
 
@@ -252,18 +249,20 @@ export default defineComponent({
   width: 100%;
   height: 100%;
   background-color: #eee;
+  list-style: none;
   &,
   &__item,
-  &__placeholder {
+  &__placeholder,
+  &__scroll-runway {
     position: absolute;
+    top: 0;
     contain: layout;
     will-change: transform;
     box-sizing: border-box;
   }
   &__scroll-runway {
-    position: absolute;
-    width: 1px;
     height: 1px;
+    width: 100%;
     transition: transform 0.2s;
   }
 }

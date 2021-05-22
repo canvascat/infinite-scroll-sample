@@ -14,17 +14,9 @@
   </li>
 </template>
 
-<script lang="ts">
-import { defineComponent } from 'vue'
-
-export default defineComponent({
-  name: 'place-holder'
-})
-</script>
-
 <style scoped lang="scss">
 .placeholder {
-  padding: 11px 20px;
+  padding: .5rem 1rem;
   width: 100%;
   &__wrapper {
     padding: 20px;

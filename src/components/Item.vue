@@ -1,10 +1,10 @@
 <template>
-  <li class="item" ref="liRef">
+  <li class="item" ref="liRef" :data-index="data.index">
     <div class="item__wrapper" :class="{ 'is-fixed': fixedHeight }" >
       <div class="item__info">
         <img :src="data.avatar" class="item__avatar" />
-        <p class="item__name">{{ index }}. {{ data.name }}</p>
-        <p class="item__date">{{ data.dob }}</p>
+        <p class="item__name">{{ data.name }}</p>
+        <p class="item__date">{{ data.dob.toLocaleString() }}</p>
       </div>
       <template v-if="fixedHeight">
         <p class="item__text">E-mail: {{ data.email }}</p>
@@ -31,10 +31,6 @@ import type { DataItem } from 'src/types'
 export default defineComponent({
   name: 'item',
   props: {
-    index: {
-      type: Number,
-      default: 0,
-    },
     data: {
       type: Object as PropType<DataItem>,
       required: true
@@ -43,6 +39,9 @@ export default defineComponent({
       type: Boolean,
       default: true,
     },
+    index: {
+      default: 0
+    }
   },
 
   setup (props, context) {
@@ -62,7 +61,7 @@ export default defineComponent({
     onMounted(() => {
       if (props.fixedHeight) return;
       ro.value = new ResizeObserver((entries, observer) => {
-        context.emit('size-change', props.index)
+        context.emit('size-change', props.data.index)
       });
       ro.value.observe(liRef.value!);
     })
@@ -79,7 +78,7 @@ export default defineComponent({
 
 <style scoped lang="scss">
 .item {
-  padding: 11px 20px;
+  padding: .5rem 1rem;
   width: 100%;
   &.is-fixed {
     &__name,
@@ -92,14 +91,14 @@ export default defineComponent({
     }
   }
   &__wrapper {
-    padding: 20px;
-    padding-top: 0;
+    padding: 1rem;
     background-color: #fff;
     border: 1px solid #eaeaea;
-    border-radius: 5px;
+    border-radius: .5rem;
   }
   &__info {
-    padding: 20px 0 20px 60px;
+    padding-bottom: 1rem;
+    padding-left: 4rem;
     position: relative;
   }
   &__avatar {
@@ -107,25 +106,29 @@ export default defineComponent({
     top: 0;
     bottom: 0;
     left: 0;
-    margin: auto 0;
-    width: 50px;
-    height: 50px;
+    width: 3rem;
+    height: 3rem;
     background-color: #eaeaea;
-    border-radius: 100%;
+    border-radius: .5rem;
     overflow: hidden;
   }
   &__name,
   &__date,
   &__text,
   &__paragraph {
-    margin-bottom: 4px;
     max-width: 100%;
+    font-size: .8rem;
+    margin: 0;
+  }
+  &__name,
+  &__date {
     font-weight: bold;
-    font-size: 12px;
+    line-height: 2;
   }
   &__text,
   &__paragraph {
-    font-weight: normal;
+    text-align: justify;
+    line-height: 1.5;
   }
   &__img {
     margin-top: 10px;
