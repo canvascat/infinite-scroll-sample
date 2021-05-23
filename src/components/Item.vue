@@ -1,6 +1,6 @@
 <template>
   <li class="item" ref="liRef" :data-index="data.index">
-    <div class="item__wrapper" :class="{ 'is-fixed': fixedHeight }" >
+    <div class="item__wrapper" :class="{ 'is-fixed': fixedHeight }">
       <div class="item__info">
         <img :src="data.avatar" class="item__avatar" />
         <p class="item__name">{{ data.name }}</p>
@@ -23,10 +23,11 @@
 
 <script lang="ts">
 import { defineComponent, onMounted, onUnmounted, ref } from 'vue'
-import faker from 'faker'
-import { sleep } from 'src/util'
+import { sleep, random } from 'src/util'
+import { addResizeListener, removeResizeListener } from 'src/resize-event'
 import type { PropType } from 'vue'
 import type { DataItem } from 'src/types'
+import type { ResizableElement } from 'src/resize-event'
 
 export default defineComponent({
   name: 'item',
@@ -38,35 +39,33 @@ export default defineComponent({
     fixedHeight: {
       type: Boolean,
       default: true,
-    },
-    index: {
-      default: 0
     }
   },
 
-  setup (props, context) {
+  emits: ['resize'],
+
+  setup(props, context) {
     const defferImgSrc = ref('')
-    const liRef = ref<HTMLLIElement>()
-    const ro = ref<ResizeObserver>()
+    const liRef = ref<HTMLElement>()
     // 模拟图片加载时间
     if (props.data.img.loaded) {
-      defferImgSrc.value = props.data.img.src;
+      defferImgSrc.value = props.data.img.src
     } else {
-      sleep(faker.datatype.number({ min: 300, max: 5000 }))
+      sleep(random(5000, 300))
         .then(() => {
-          defferImgSrc.value = props.data.img.src;
-          props.data.img.loaded = true;
+          defferImgSrc.value = props.data.img.src
+          props.data.img.loaded = true
         })
     }
+    function emitResize() {
+      context.emit('resize', props.data.index)
+    }
     onMounted(() => {
-      if (props.fixedHeight) return;
-      ro.value = new ResizeObserver((entries, observer) => {
-        context.emit('size-change', props.data.index)
-      });
-      ro.value.observe(liRef.value!);
+      if (props.fixedHeight) return
+      liRef.value && addResizeListener(liRef.value as ResizableElement, emitResize)
     })
     onUnmounted(() => {
-      ro.value?.disconnect.bind(ro.value)
+      liRef.value && removeResizeListener(liRef.value as ResizableElement, emitResize)
     })
     return {
       defferImgSrc,
@@ -78,8 +77,15 @@ export default defineComponent({
 
 <style scoped lang="scss">
 .item {
-  padding: .5rem 1rem;
+  padding: 0.5rem 1rem;
   width: 100%;
+  &::after {
+    content: "index: " attr(data-index);
+    position: absolute;
+    top: 1.5rem;
+    right: 2rem;
+    pointer-events: none;
+  }
   &.is-fixed {
     &__name,
     &__date,
@@ -94,7 +100,7 @@ export default defineComponent({
     padding: 1rem;
     background-color: #fff;
     border: 1px solid #eaeaea;
-    border-radius: .5rem;
+    border-radius: 0.5rem;
   }
   &__info {
     padding-bottom: 1rem;
@@ -109,7 +115,7 @@ export default defineComponent({
     width: 3rem;
     height: 3rem;
     background-color: #eaeaea;
-    border-radius: .5rem;
+    border-radius: 0.5rem;
     overflow: hidden;
   }
   &__name,
@@ -117,7 +123,7 @@ export default defineComponent({
   &__text,
   &__paragraph {
     max-width: 100%;
-    font-size: .8rem;
+    font-size: 0.8rem;
     margin: 0;
   }
   &__name,

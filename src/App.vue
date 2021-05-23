@@ -1,11 +1,10 @@
 <template>
-  <ul
-    ref="scrollerRef"
-    class="height-dynamic"
-    @scroll="handleScroll"
-  >
+  <ul ref="scrollerRef" class="height-dynamic" @scroll="handleScroll">
     <!-- 负责撑开 ul 的高度 -->
-    <li class="height-dynamic__scroll-runway" :style="`transform: translateY(${scrollRunwayEnd}px)`"></li>
+    <li
+      class="height-dynamic__scroll-runway"
+      :style="`transform: translateY(${scrollRunwayEnd}px)`"
+    ></li>
     <!-- 下拉占位符 -->
     <placeholder-item
       class="height-dynamic__placeholder"
@@ -20,9 +19,8 @@
       :data="item"
       :fixed-height="false"
       :key="item.username + item.phone"
-      :index="item.index"
       :style="`transform: translateY(${cachedScrollY[item.index] || item.index * ESTIMATED_HEIGHT}px)`"
-      @size-change="calItemScrollY"
+      @resize="calItemScrollY"
     />
     <!-- 上拉占位符 -->
     <placeholder-item
@@ -42,11 +40,12 @@ import { fetchData } from 'src/util'
 import type { DataItem } from 'src/types'
 
 type ItemComponent = typeof Item & {
-  $el: HTMLElement
+  $el: HTMLElement,
+  data: DataItem
 }
 
 export default defineComponent({
-  setup () {
+  setup() {
     const itemRefs = ref<ItemComponent[]>([])
     const PLACEHOLDER_COUNT = 6
     const BUFFER_SIZE = 3
@@ -159,8 +158,8 @@ export default defineComponent({
       if (!scrollerRef.value) return
       await nextTick()
       // 修正 vue diff 算法导致 item 顺序不正确的问题
-      itemRefs.value.sort((a, b) => a.index - b.index)
-      const anchorDomIndex = itemRefs.value.findIndex(item => item.index === anchorItem.index);
+      itemRefs.value.sort((a, b) => a.data.index - b.data.index)
+      const anchorDomIndex = itemRefs.value.findIndex(item => item.data.index === anchorItem.index);
       const anchorDom = itemRefs.value[anchorDomIndex];
       const anchorDomHeight = anchorDom.$el.getBoundingClientRect().height;
       cachedScrollY.value[anchorItem.index] = scrollerRef.value.scrollTop - anchorItem.offset
@@ -169,16 +168,16 @@ export default defineComponent({
       for (let i = anchorDomIndex + 1; i < itemRefs.value.length; i++) {
         const item = itemRefs.value[i];
         const { height } = item.$el.getBoundingClientRect();
-        cachedHeight.value[item.index] = height
-        const scrollY = cachedScrollY.value[item.index - 1] + cachedHeight.value[item.index - 1];
-        cachedScrollY.value[item.index] = scrollY
+        cachedHeight.value[item.data.index] = height
+        const scrollY = cachedScrollY.value[item.data.index - 1] + cachedHeight.value[item.data.index - 1];
+        cachedScrollY.value[item.data.index] = scrollY
       }
       // 计算 anchorItem 前面的 item scrollY
       for (let i = anchorDomIndex - 1; i >= 0; i--) {
         const item = itemRefs.value[i];
-        cachedHeight.value[item.index] = item.$el.getBoundingClientRect().height
-        const scrollY = cachedScrollY.value[item.index + 1] - cachedHeight.value[item.index]
-        cachedScrollY.value[item.index] = scrollY
+        cachedHeight.value[item.data.index] = item.$el.getBoundingClientRect().height
+        const scrollY = cachedScrollY.value[item.data.index + 1] - cachedHeight.value[item.data.index]
+        cachedScrollY.value[item.data.index] = scrollY
       }
       // 修正拖动过快导致的滚动到顶端有空余的偏差
       if (cachedScrollY.value[0] > 0) {
@@ -216,7 +215,7 @@ export default defineComponent({
       updateData()
       updateVisibleData()
     })
-  
+
     return {
       ESTIMATED_HEIGHT,
       visibleData,
