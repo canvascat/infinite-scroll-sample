@@ -23,14 +23,13 @@
 
 <script lang="ts">
 import { defineComponent, onMounted, onUnmounted, ref } from 'vue'
-import { sleep, random } from 'src/util'
-import { addResizeListener, removeResizeListener } from 'src/resize-event'
+import { sleep, random } from 'src/util/util'
+import { addResizeListener, removeResizeListener } from 'src/util/resize-event'
 import type { PropType } from 'vue'
 import type { DataItem } from 'src/types'
-import type { ResizableElement } from 'src/resize-event'
+import type { ResizableElement } from 'src/util/resize-event'
 
 export default defineComponent({
-  name: 'item',
   props: {
     data: {
       type: Object as PropType<DataItem>,

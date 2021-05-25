@@ -33,11 +33,12 @@
 </template>
 
 <script lang="ts">
-import { computed, defineComponent, nextTick, onBeforeUpdate, onMounted, ref } from 'vue'
+import { computed, defineComponent, nextTick, onBeforeUpdate, onMounted, onUnmounted, ref } from 'vue'
 import Item from 'src/components/Item.vue'
 import PlaceholderItem from 'src/components/PlaceholderItem.vue'
-import { fetchData } from 'src/util'
+import { fetchData, rafThrottle } from 'src/util/util'
 import type { DataItem } from 'src/types'
+import { addResizeListener, removeResizeListener } from './util/resize-event'
 
 type ItemComponent = typeof Item & {
   $el: HTMLElement,
@@ -52,7 +53,7 @@ export default defineComponent({
     const ESTIMATED_HEIGHT = 180
     let VISIBLE_COUNT = BUFFER_SIZE << 1
 
-    let anchorItem = { index: 0, offset: 0 }
+    const anchorItem = { index: 0, offset: 0 }
     const listData: DataItem[] = []
     const visibleData = ref<DataItem[]>([])
     const topPlaceholders = ref(0)
@@ -102,8 +103,8 @@ export default defineComponent({
       const end = Math.min(lastAttachedItem.value, listData.length);
       visibleData.value = listData.slice(start, end)
     }
-    function updatePlaceholder(isPositive: boolean) {
-      if (isPositive) {
+    function updatePlaceholder(delta: number) {
+      if (delta >= 0) {
         topPlaceholders.value = 0;
         bottomPlaceholders.value = Math.min(PLACEHOLDER_COUNT, Math.abs(listData.length - lastAttachedItem.value));
       } else {
@@ -116,27 +117,27 @@ export default defineComponent({
       const { index: lastIndex, offset: lastOffset } = anchorItem
       delta += lastOffset;
       let index = lastIndex;
-      if (delta >= 0) {
+      if (delta >= 0) { // 向下
         while (index < listData.length && delta > (cachedHeight.value[index] || ESTIMATED_HEIGHT)) {
           cachedHeight.value[index] ||= ESTIMATED_HEIGHT
           delta -= cachedHeight.value[index]
           index++
         }
         if (index >= listData.length) {
-          anchorItem = { index: listData.length - 1, offset: 0 };
+          Object.assign(anchorItem, { index: listData.length - 1, offset: 0 })
         } else {
-          anchorItem = { index, offset: delta };
+          Object.assign(anchorItem, { index, offset: delta })
         }
-      } else {
+      } else { // 向上
         while (delta < 0) {
           cachedHeight.value[index - 1] ||= ESTIMATED_HEIGHT
           delta += cachedHeight.value[index - 1];
           index--;
         }
         if (index < 0) {
-          anchorItem = { index: 0, offset: 0 };
+          Object.assign(anchorItem, { index: 0, offset: 0 })
         } else {
-          anchorItem = { index, offset: delta };
+          Object.assign(anchorItem, { index, offset: delta })
         }
       }
       // 修正拖动过快导致的滚动到顶端滚动条不足的偏差
@@ -147,7 +148,7 @@ export default defineComponent({
         if (!scrollerRef.value) return
         lastScrollTop = scrollerRef.value.scrollTop = actualScrollY + anchorItem.offset
         if (scrollerRef.value.scrollTop === 0) {
-          anchorItem = { index: 0, offset: 0 };
+          Object.assign(anchorItem, { index: 0, offset: 0 })
         }
         calItemScrollY()
         revising = false
@@ -198,22 +199,29 @@ export default defineComponent({
     }
 
     function handleScroll() {
-      if (revising) return
-      const { scrollTop } = scrollerRef.value!
-      const delta = scrollTop - lastScrollTop;
-      lastScrollTop = scrollTop;
-      updateAnchorItem(delta);
+      if (revising || !scrollerRef.value) return
+      const { scrollTop } = scrollerRef.value
+      const delta = scrollTop - lastScrollTop
+      lastScrollTop = scrollTop
+      updateAnchorItem(delta)
       updateVisibleData()
-      updatePlaceholder(delta >= 0)
+      updatePlaceholder(delta)
       handleLoadMore()
     }
 
+    const handleResize = rafThrottle(function() {
+      console.log('scroll dom resize')
+    })
 
     onMounted(() => {
+      addResizeListener(scrollerRef.value, handleResize)
       VISIBLE_COUNT = (scrollerRef.value!.offsetHeight / ESTIMATED_HEIGHT) >> 0
       lastAttachedItem.value = VISIBLE_COUNT + BUFFER_SIZE
       updateData()
       updateVisibleData()
+    })
+    onUnmounted(() => {
+      removeResizeListener(scrollerRef.value, handleResize)
     })
 
     return {

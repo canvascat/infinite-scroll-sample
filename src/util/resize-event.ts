@@ -1,22 +1,13 @@
 export type ResizableElement = HTMLElement & {
-  __resizeListeners__: Array<(...args: unknown[]) => unknown>
-  __ro__: ResizeObserver
+  __resizeListeners__?: Array<(...args: unknown[]) => unknown>
+  __ro__?: ResizeObserver
 }
 
-const resizeHandler = function (entries: ResizeObserverEntry[]) {
-  for (const entry of entries) {
-    const listeners =
-      (entry.target as ResizableElement).__resizeListeners__ || []
-    if (listeners.length) {
-      listeners.forEach(fn => {
-        fn()
-      })
-    }
-  }
-}
+const resizeHandler = (entries: ResizeObserverEntry[]) =>
+  entries.forEach(({ target }) => (target as ResizableElement).__resizeListeners__?.forEach(fn => fn()))
 
 export const addResizeListener = function (
-  element: ResizableElement,
+  element: Nullable<ResizableElement>,
   fn: (...args: unknown[]) => unknown,
 ): void {
   if (!element) return
@@ -29,7 +20,7 @@ export const addResizeListener = function (
 }
 
 export const removeResizeListener = function (
-  element: ResizableElement,
+  element: Nullable<ResizableElement>,
   fn: (...args: unknown[]) => unknown,
 ): void {
   if (!element || !element.__resizeListeners__) return
@@ -38,6 +29,6 @@ export const removeResizeListener = function (
     1,
   )
   if (!element.__resizeListeners__.length) {
-    element.__ro__.disconnect()
+    element.__ro__?.disconnect()
   }
 }
