@@ -1,201 +1,92 @@
 <template>
-  <ul ref="scrollerRef" class="height-dynamic" @scroll="handleScroll">
-    <!-- 负责撑开 ul 的高度 -->
-    <li
-      class="height-dynamic__scroll-runway"
-      :style="`transform: translateY(${scrollRunwayEnd}px)`"
-    ></li>
-    <!-- 下拉占位符 -->
-    <placeholder-item
-      class="height-dynamic__placeholder"
-      v-for="(item, index) in topPlaceholders"
-      :key="-index - 1"
-      :style="`transform: translateY(${cachedScrollY[firstAttachedItem] - ESTIMATED_HEIGHT * (index + 1)}px)`"
-    />
+  <ul ref="scrollerRef" @scroll="handleScroll" :style="`--end-offset: translateY(${heightSum}px)`">
     <item
-      class="height-dynamic__item"
       v-for="(item, i) in visibleData"
       :ref="(el) => updateItemRefs(el, i)"
       :data="item"
-      :fixed-height="false"
-      :key="item.username + item.phone"
-      :style="`transform: translateY(${cachedScrollY[item.index] || item.index * ESTIMATED_HEIGHT}px)`"
-      @resize="calItemScrollY"
-    />
-    <!-- 上拉占位符 -->
-    <placeholder-item
-      class="height-dynamic__placeholder"
-      v-for="(item, index) in bottomPlaceholders"
-      :key="index + 1"
-      :style="`transform: translateY(${cachedScrollY[lastAttachedItem - 1] + cachedHeight[lastAttachedItem - 1] + ESTIMATED_HEIGHT * (index + 1)}px)`"
+      :key="item.index"
+      :style="`transform: translateY(${cacheOffsetY[item.index]}px)`"
+      @resize="updateItemHeight(item)"
     />
   </ul>
 </template>
 
 <script lang="ts">
-import { computed, defineComponent, nextTick, onBeforeUpdate, onMounted, onUnmounted, ref } from 'vue'
+import { defineComponent, onBeforeUpdate, onMounted, onUnmounted, ref } from 'vue'
 import Item from 'src/components/Item.vue'
-import PlaceholderItem from 'src/components/PlaceholderItem.vue'
 import { fetchData, rafThrottle } from 'src/util/util'
 import type { DataItem } from 'src/types'
 import { addResizeListener, removeResizeListener } from './util/resize-event'
 
-type ItemComponent = typeof Item & {
-  $el: HTMLElement,
-  data: DataItem
-}
-
 export default defineComponent({
   setup() {
-    const itemRefs = ref<ItemComponent[]>([])
-    const PLACEHOLDER_COUNT = 6
+    /** 缓冲区数量 */
     const BUFFER_SIZE = 3
+    /** 盒子默认高度 */
     const ESTIMATED_HEIGHT = 180
-    let VISIBLE_COUNT = BUFFER_SIZE << 1
 
-    const anchorItem = { index: 0, offset: 0 }
+    /** 原始数据 */
     const listData: DataItem[] = []
+    /** 显示数据 */
     const visibleData = ref<DataItem[]>([])
-    const topPlaceholders = ref(0)
-    const bottomPlaceholders = ref(0)
-    const firstAttachedItem = ref(0)
-    const lastAttachedItem = ref(0)
-    const cachedScrollY = ref<number[]>([])
-    const cachedHeight = ref<number[]>([])
+    const visibleCount = ref(0)
+    const visibleRange: [number, number] = [0, 0]
+    /** 显示项的必要数据，el，index */
+    const visibleItems: { el: HTMLElement, index: number }[] = []
+    const cacheHeight: number[] = []
+    const cacheOffsetY = ref([0])
+    const heightSum = ref(0)
     let lastScrollTop = 0
     let revising = false
+    const toBeUpdateIndex = new Set<number>()
 
     const scrollerRef = ref<HTMLElement>()
 
     onBeforeUpdate(() => {
-      itemRefs.value.length = 0
+      visibleItems.length = 0
     })
-
     function updateItemRefs(el: any, i: number) {
-      if (el) itemRefs.value[i] = el as ItemComponent
+      if (el) visibleItems[i] = { el: el.$el, index: el.data.index }
     }
 
-    const scrollRunwayEnd = computed(() => {
-      const maxScrollY = cachedHeight.value.reduce((sum, h) => (sum += h || ESTIMATED_HEIGHT), 0);
-      const currentAverageH = maxScrollY / cachedHeight.value.length;
-      if (isNaN(currentAverageH)) {
-        return listData.length * ESTIMATED_HEIGHT;
-      } else {
-        return maxScrollY + (listData.length - cachedHeight.value.length) * currentAverageH;
-      }
-    })
-
-    function updateData() {
-      const data = fetchData()
+    function updateData(num?: number) {
+      const data = fetchData(num)
       listData.push(...data)
-      updateVisibleData()
-    }
-    function handleLoadMore() {
-      const { scrollTop, offsetHeight } = scrollerRef.value!
-      const scrollEnd = scrollTop + offsetHeight + ESTIMATED_HEIGHT;
-      if (scrollEnd >= scrollRunwayEnd.value || anchorItem.index === listData.length - 1) {
-        updateData()
-      }
-    }
-    function updateVisibleData() {
-      const start = (firstAttachedItem.value = Math.max(0, anchorItem.index - BUFFER_SIZE))
-      lastAttachedItem.value = firstAttachedItem.value + VISIBLE_COUNT + BUFFER_SIZE * 2;
-      const end = Math.min(lastAttachedItem.value, listData.length);
-      visibleData.value = listData.slice(start, end)
-    }
-    function updatePlaceholder(delta: number) {
-      if (delta >= 0) {
-        topPlaceholders.value = 0;
-        bottomPlaceholders.value = Math.min(PLACEHOLDER_COUNT, Math.abs(listData.length - lastAttachedItem.value));
-      } else {
-        topPlaceholders.value = Math.min(PLACEHOLDER_COUNT, firstAttachedItem.value);
-        bottomPlaceholders.value = 0;
-      }
     }
 
-    async function updateAnchorItem(delta: number) {
-      const { index: lastIndex, offset: lastOffset } = anchorItem
-      delta += lastOffset;
-      let index = lastIndex;
-      if (delta >= 0) { // 向下
-        while (index < listData.length && delta > (cachedHeight.value[index] || ESTIMATED_HEIGHT)) {
-          cachedHeight.value[index] ||= ESTIMATED_HEIGHT
-          delta -= cachedHeight.value[index]
-          index++
-        }
-        if (index >= listData.length) {
-          Object.assign(anchorItem, { index: listData.length - 1, offset: 0 })
-        } else {
-          Object.assign(anchorItem, { index, offset: delta })
-        }
-      } else { // 向上
-        while (delta < 0) {
-          cachedHeight.value[index - 1] ||= ESTIMATED_HEIGHT
-          delta += cachedHeight.value[index - 1];
-          index--;
-        }
-        if (index < 0) {
-          Object.assign(anchorItem, { index: 0, offset: 0 })
-        } else {
-          Object.assign(anchorItem, { index, offset: delta })
-        }
+    const updateHeight = rafThrottle(function() {
+      // TODO: 当滚动过快时
+      const startIndex = visibleItems.findIndex(item => toBeUpdateIndex.has(item.index))
+      if (startIndex === -1) {
+        console.log(visibleItems.map(m => m.index))
+        toBeUpdateIndex.clear();
+        return
       }
-      // 修正拖动过快导致的滚动到顶端滚动条不足的偏差
-      if (cachedScrollY.value[firstAttachedItem.value] <= -1) {
-        console.log('revising insufficient');
-        revising = true;
-        const actualScrollY = cachedHeight.value.slice(0, Math.max(0, anchorItem.index)).reduce((sum, h) => (sum += h), 0);
-        if (!scrollerRef.value) return
-        lastScrollTop = scrollerRef.value.scrollTop = actualScrollY + anchorItem.offset
-        if (scrollerRef.value.scrollTop === 0) {
-          Object.assign(anchorItem, { index: 0, offset: 0 })
-        }
-        calItemScrollY()
-        revising = false
+      updateCacheHeight(startIndex)
+      updateCacheOffsetY(startIndex + 1)
+    })
+    /** 更新高度缓存 */
+    function updateCacheHeight(start = 0) {
+      for (let i = start; i < visibleItems.length; i++) {
+        const { el, index } = visibleItems[i]
+        if (!toBeUpdateIndex.has(index)) continue
+        const { height } = el.getBoundingClientRect()
+        cacheHeight[index] = height
       }
+      toBeUpdateIndex.clear()
     }
-    // 计算每一个 item 的 translateY 的高度
-    async function calItemScrollY() {
-      if (!scrollerRef.value) return
-      await nextTick()
-      // 修正 vue diff 算法导致 item 顺序不正确的问题
-      itemRefs.value.sort((a, b) => a.data.index - b.data.index)
-      const anchorDomIndex = itemRefs.value.findIndex(item => item.data.index === anchorItem.index);
-      const anchorDom = itemRefs.value[anchorDomIndex];
-      const anchorDomHeight = anchorDom.$el.getBoundingClientRect().height;
-      cachedScrollY.value[anchorItem.index] = scrollerRef.value.scrollTop - anchorItem.offset
-      cachedHeight.value[anchorItem.index] = anchorDomHeight
-      // 计算 anchorItem 后面的 item scrollY
-      for (let i = anchorDomIndex + 1; i < itemRefs.value.length; i++) {
-        const item = itemRefs.value[i];
-        const { height } = item.$el.getBoundingClientRect();
-        cachedHeight.value[item.data.index] = height
-        const scrollY = cachedScrollY.value[item.data.index - 1] + cachedHeight.value[item.data.index - 1];
-        cachedScrollY.value[item.data.index] = scrollY
+    /** 更新偏移量缓存 */
+    function updateCacheOffsetY(start = 1) {
+      let offsetY = cacheHeight.slice(0, start).reduce((a, b) => a + b, 0)
+      for (let i = start; i < cacheHeight.length; i++) {
+        cacheOffsetY.value[i] = offsetY
+        offsetY += cacheHeight[i]
       }
-      // 计算 anchorItem 前面的 item scrollY
-      for (let i = anchorDomIndex - 1; i >= 0; i--) {
-        const item = itemRefs.value[i];
-        cachedHeight.value[item.data.index] = item.$el.getBoundingClientRect().height
-        const scrollY = cachedScrollY.value[item.data.index + 1] - cachedHeight.value[item.data.index]
-        cachedScrollY.value[item.data.index] = scrollY
-      }
-      // 修正拖动过快导致的滚动到顶端有空余的偏差
-      if (cachedScrollY.value[0] > 0) {
-        console.log('revising redundant');
-        revising = true;
-        const delta = cachedScrollY.value[0];
-        const last = Math.min(lastAttachedItem.value, listData.length);
-        for (let i = 0; i < last; i++) {
-          cachedScrollY.value[i] = cachedScrollY.value[i] - delta
-        }
-        const scrollTop = cachedScrollY.value[anchorItem.index - 1]
-          ? cachedScrollY.value[anchorItem.index - 1] + anchorItem.offset
-          : anchorItem.offset;
-        scrollerRef.value.scrollTop = scrollTop;
-        lastScrollTop = scrollerRef.value.scrollTop;
-        revising = false;
-      }
+      heightSum.value = offsetY
+    }
+    function updateItemHeight(item: DataItem) {
+      toBeUpdateIndex.add(item.index)
+      updateHeight()
     }
 
     function handleScroll() {
@@ -203,22 +94,72 @@ export default defineComponent({
       const { scrollTop } = scrollerRef.value
       const delta = scrollTop - lastScrollTop
       lastScrollTop = scrollTop
-      updateAnchorItem(delta)
-      updateVisibleData()
-      updatePlaceholder(delta)
-      handleLoadMore()
+      updateVisibleRange(delta)
+      // TODO: 根据情况加载数据
+    }
+
+    function updateVisibleCount() {
+      const { offsetHeight } = scrollerRef.value!
+      const mean = cacheHeight.length ? heightSum.value / cacheHeight.length : ESTIMATED_HEIGHT
+      const min = Math.ceil(offsetHeight / mean)
+      // 最小显示8个
+      return (visibleCount.value = Math.max(min << 1, min + BUFFER_SIZE << 1, 8))
+    }
+
+    function createRange(startY: number, endY: number) {
+      const list = cacheOffsetY.value
+      const len = list.length
+      const range: [number, number] = [0, len]
+      for (let i = 0; i < len; i++) {
+        if (list[i] >= startY) {
+          range[0] = i
+          for (let j = i + 1; j < len; j++) {
+            if (list[j] >= endY) {
+              range[1] = j + 1
+              break;
+            }
+          }
+          break
+        }
+      }
+      return range
+    }
+
+    function updateVisibleRange(offset: number) {
+      if (offset === 0) return
+      const { scrollTop: startOffset, offsetHeight } = scrollerRef.value!
+      const endOffset = startOffset + offsetHeight
+      const [oldStart, oldEnd] = visibleRange
+      const [start, end] = createRange(startOffset, endOffset)
+      console.log(offset, ...visibleRange, start, end, heightSum.value, endOffset)
+      if (start > oldStart && end < oldEnd) return
+      if (offset > 0) { // 下
+        visibleRange[0] = Math.max(start - BUFFER_SIZE, 0)
+        visibleRange[1] = Math.min(visibleRange[0] + visibleCount.value, listData.length)
+      } else {
+        visibleRange[1] = Math.min(end + BUFFER_SIZE, listData.length)
+        visibleRange[0] = Math.max(visibleRange[1] - visibleCount.value, 0)
+      }
+      if (visibleRange[1] >= listData.length) updateData()
+      updateVisibleData(...visibleRange)
+    }
+
+    function updateVisibleData(start: number, end: number) {
+      if (end >= listData.length) return
+      if (start === visibleData.value[0].index && end === visibleData.value.slice(-1)[0].index) return
+      visibleData.value = listData.slice(start, end)
     }
 
     const handleResize = rafThrottle(function() {
-      console.log('scroll dom resize')
+      updateVisibleCount()
     })
 
     onMounted(() => {
       addResizeListener(scrollerRef.value, handleResize)
-      VISIBLE_COUNT = (scrollerRef.value!.offsetHeight / ESTIMATED_HEIGHT) >> 0
-      lastAttachedItem.value = VISIBLE_COUNT + BUFFER_SIZE
-      updateData()
-      updateVisibleData()
+      const count = updateVisibleCount()
+      visibleRange[1] = count
+      updateData(count << 1)
+      visibleData.value = listData.slice(...visibleRange)
     })
     onUnmounted(() => {
       removeResizeListener(scrollerRef.value, handleResize)
@@ -227,27 +168,21 @@ export default defineComponent({
     return {
       ESTIMATED_HEIGHT,
       visibleData,
-      topPlaceholders,
-      bottomPlaceholders,
-      firstAttachedItem,
-      lastAttachedItem,
-      cachedScrollY,
-      cachedHeight,
-      scrollRunwayEnd,
       scrollerRef,
-      itemRefs,
+      cacheOffsetY,
+      heightSum,
 
       handleScroll,
-      calItemScrollY,
-      updateItemRefs
+      updateItemRefs,
+      updateItemHeight
     }
   },
-  components: { Item, PlaceholderItem },
+  components: { Item },
 });
 </script>
 
 <style scoped lang="scss">
-.height-dynamic {
+ul {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
@@ -258,19 +193,21 @@ export default defineComponent({
   background-color: #eee;
   list-style: none;
   &,
-  &__item,
-  &__placeholder,
-  &__scroll-runway {
+  &::after,
+  & > li {
     position: absolute;
     top: 0;
-    contain: layout;
+    // contain: layout;
     will-change: transform;
     box-sizing: border-box;
   }
-  &__scroll-runway {
+  &::after {
+    content: '';
     height: 1px;
     width: 100%;
-    transition: transform 0.2s;
+    pointer-events: none;
+    transform: var(--end-offset);
+    margin-top: -1px;
   }
 }
 </style>

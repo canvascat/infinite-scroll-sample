@@ -1,34 +1,41 @@
+/**
+ * 对 ResizeObserver 重新包装，用于监听元素尺寸变化
+ */
+
+const CustomResizeListenersSymbol = Symbol.for('CustomResizeListenersSymbol')
+const CustomResizeObserverSymbol = Symbol.for('CustomResizeObserverSymbol')
+
 export type ResizableElement = HTMLElement & {
-  __resizeListeners__?: Array<(...args: unknown[]) => unknown>
-  __ro__?: ResizeObserver
+  [CustomResizeListenersSymbol]?: Array<(...args: unknown[]) => unknown>
+  [CustomResizeObserverSymbol]?: ResizeObserver
 }
 
 const resizeHandler = (entries: ResizeObserverEntry[]) =>
-  entries.forEach(({ target }) => (target as ResizableElement).__resizeListeners__?.forEach(fn => fn()))
+  entries.forEach(({ target }) => (target as ResizableElement)[CustomResizeListenersSymbol]?.forEach(fn => fn()))
 
 export const addResizeListener = function (
   element: Nullable<ResizableElement>,
   fn: (...args: unknown[]) => unknown,
 ): void {
   if (!element) return
-  if (!element.__resizeListeners__) {
-    element.__resizeListeners__ = []
-    element.__ro__ = new ResizeObserver(resizeHandler)
-    element.__ro__.observe(element)
+  if (!element[CustomResizeListenersSymbol]) {
+    element[CustomResizeListenersSymbol] = []
+    element[CustomResizeObserverSymbol] = new ResizeObserver(resizeHandler)
+    element[CustomResizeObserverSymbol]!.observe(element)
   }
-  element.__resizeListeners__.push(fn)
+  element[CustomResizeListenersSymbol]!.push(fn)
 }
 
 export const removeResizeListener = function (
   element: Nullable<ResizableElement>,
   fn: (...args: unknown[]) => unknown,
 ): void {
-  if (!element || !element.__resizeListeners__) return
-  element.__resizeListeners__.splice(
-    element.__resizeListeners__.indexOf(fn),
+  if (!element || !element[CustomResizeListenersSymbol]) return
+  element[CustomResizeListenersSymbol]!.splice(
+    element[CustomResizeListenersSymbol]!.indexOf(fn),
     1,
   )
-  if (!element.__resizeListeners__.length) {
-    element.__ro__?.disconnect()
+  if (!element[CustomResizeListenersSymbol]!.length) {
+    element[CustomResizeObserverSymbol]?.disconnect()
   }
 }

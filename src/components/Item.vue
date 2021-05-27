@@ -1,23 +1,15 @@
 <template>
-  <li class="item" ref="liRef" :data-index="data.index">
-    <div class="item__wrapper" :class="{ 'is-fixed': fixedHeight }">
-      <div class="item__info">
-        <img :src="data.avatar" class="item__avatar" />
-        <p class="item__name">{{ data.name }}</p>
-        <p class="item__date">{{ data.dob.toLocaleString() }}</p>
-      </div>
-      <template v-if="fixedHeight">
-        <p class="item__text">E-mail: {{ data.email }}</p>
-        <p class="item__text">Phone: {{ data.phone }}</p>
-        <p class="item__text">City: {{ data.address.city }}</p>
-        <p class="item__text">Street: {{ data.address.street }}</p>
-      </template>
-      <template v-else>
-        <p class="item__paragraph">{{ data.paragraph }}</p>
-        <img loading="lazy" :src="defferImgSrc" class="item__img" />
-        <img loading="lazy" :src="data.img.src" class="item__img" />
-      </template>
-    </div>
+  <li ref="liRef" :data-index="data.index">
+    <article>
+      <section>
+        <img :src="data.avatar"/>
+        <p><strong>{{ data.name }}</strong></p>
+        <p><strong>{{ data.dob.toLocaleString() }}</strong></p>
+      </section>
+      <p>{{ data.paragraph }}</p>
+      <img loading="lazy" :src="defferImgSrc"/>
+      <img loading="lazy" :src="data.img.src"/>
+    </article>
   </li>
 </template>
 
@@ -37,7 +29,7 @@ export default defineComponent({
     },
     fixedHeight: {
       type: Boolean,
-      default: true,
+      default: false,
     }
   },
 
@@ -46,6 +38,7 @@ export default defineComponent({
   setup(props, context) {
     const defferImgSrc = ref('')
     const liRef = ref<HTMLElement>()
+    let height = 0
     // 模拟图片加载时间
     if (props.data.img.loaded) {
       defferImgSrc.value = props.data.img.src
@@ -57,6 +50,11 @@ export default defineComponent({
         })
     }
     function emitResize() {
+      // **当元素被移除时也会触发**
+      if (!liRef.value) return
+      const currentHeight = liRef.value.getBoundingClientRect().height
+      if (currentHeight === height) return
+      height = currentHeight
       context.emit('resize', props.data.index)
     }
     onMounted(() => {
@@ -75,7 +73,7 @@ export default defineComponent({
 </script>
 
 <style scoped lang="scss">
-.item {
+li {
   padding: 0.5rem 1rem;
   width: 100%;
   &::after {
@@ -85,28 +83,32 @@ export default defineComponent({
     right: 2rem;
     pointer-events: none;
   }
-  &.is-fixed {
-    &__name,
-    &__date,
-    &__text,
-    &__paragraph {
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      overflow: hidden;
-    }
-  }
-  &__wrapper {
+  > article {
     padding: 1rem;
     background-color: #fff;
     border: 1px solid #eaeaea;
     border-radius: 0.5rem;
+    > p {
+      text-align: justify;
+      line-height: 1.5;
+    }
+    > img {
+      margin-top: 10px;
+      max-width: 100% !important;
+      border-radius: 5px;
+    }
   }
-  &__info {
-    padding-bottom: 1rem;
-    padding-left: 4rem;
-    position: relative;
+  p {
+    max-width: 100%;
+    font-size: 0.8rem;
+    margin: 0;
   }
-  &__avatar {
+}
+section {
+  padding-bottom: 1rem;
+  padding-left: 4rem;
+  position: relative;
+  > img {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -117,28 +119,8 @@ export default defineComponent({
     border-radius: 0.5rem;
     overflow: hidden;
   }
-  &__name,
-  &__date,
-  &__text,
-  &__paragraph {
-    max-width: 100%;
-    font-size: 0.8rem;
-    margin: 0;
-  }
-  &__name,
-  &__date {
-    font-weight: bold;
+  > p {
     line-height: 2;
-  }
-  &__text,
-  &__paragraph {
-    text-align: justify;
-    line-height: 1.5;
-  }
-  &__img {
-    margin-top: 10px;
-    max-width: 100% !important;
-    border-radius: 5px;
   }
 }
 </style>

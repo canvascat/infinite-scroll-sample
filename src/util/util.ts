@@ -37,6 +37,7 @@ export function rafThrottle<T extends AnyFunction<any>>(fn: T): AnyFunction<void
     if (locked) return
     locked = true
     window.requestAnimationFrame(() => {
+      // @ts-ignore
       fn.apply(this, args)
       locked = false
     })
